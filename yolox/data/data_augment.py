@@ -14,6 +14,7 @@ import random
 
 import cv2
 import numpy as np
+import albumentations as A
 
 from yolox.utils import xyxy2cxcywh
 
@@ -44,11 +45,11 @@ def get_aug_params(value, center=0):
 
 
 def get_affine_matrix(
-    target_size,
-    degrees=10,
-    translate=0.1,
-    scales=0.1,
-    shear=10,
+        target_size,
+        degrees=10,
+        translate=0.1,
+        scales=0.1,
+        shear=10,
 ):
     twidth, theight = target_size
 
@@ -112,13 +113,13 @@ def apply_affine_to_bboxes(targets, target_size, M, scale):
 
 
 def random_affine(
-    img,
-    targets=(),
-    target_size=(640, 640),
-    degrees=10,
-    translate=0.1,
-    scales=0.1,
-    shear=10,
+        img,
+        targets=(),
+        target_size=(640, 640),
+        degrees=10,
+        translate=0.1,
+        scales=0.1,
+        shear=10,
 ):
     M, scale = get_affine_matrix(target_size, degrees, translate, scales, shear)
 
@@ -139,23 +140,27 @@ def _mirror(image, boxes, prob=0.5):
     return image, boxes
 
 
-def preproc(img, input_size, swap=(2, 0, 1)):
-    if len(img.shape) == 3:
-        padded_img = np.ones((input_size[0], input_size[1], 3), dtype=np.uint8) * 114
-    else:
-        padded_img = np.ones(input_size, dtype=np.uint8) * 114
-
-    r = min(input_size[0] / img.shape[0], input_size[1] / img.shape[1])
-    resized_img = cv2.resize(
-        img,
-        (int(img.shape[1] * r), int(img.shape[0] * r)),
-        interpolation=cv2.INTER_LINEAR,
-    ).astype(np.uint8)
-    padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
-
-    padded_img = padded_img.transpose(swap)
-    padded_img = np.ascontiguousarray(padded_img, dtype=np.float32)
-    return padded_img, r
+def preproc(img, boxes, labels, transform, swap=(2, 0, 1)):
+    # if len(img.shape) == 3:
+    #     padded_img = np.ones((input_size[0], input_size[1], 3), dtype=np.uint8) * 114
+    # else:
+    #     padded_img = np.ones(input_size, dtype=np.uint8) * 114
+    #
+    # r = min(input_size[0] / img.shape[0], input_size[1] / img.shape[1])
+    # resized_img = cv2.resize(
+    #     img,
+    #     (int(img.shape[1] * r), int(img.shape[0] * r)),
+    #     interpolation=cv2.INTER_LINEAR,
+    # ).astype(np.uint8)
+    # padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
+    #
+    # padded_img = padded_img.transpose(swap)
+    # padded_img = np.ascontiguousarray(padded_img, dtype=np.float32)
+    transformed = transform(image=img, bboxes=boxes, labels=labels)
+    boxes = transformed["bboxes"]
+    labels = transformed["labels"]
+    padded_img = transformed["image"].transpose(swap)
+    return padded_img, boxes, labels
 
 
 class TrainTransform:
@@ -167,9 +172,12 @@ class TrainTransform:
     def __call__(self, image, targets, input_dim):
         boxes = targets[:, :4].copy()
         labels = targets[:, 4].copy()
+        crop = A.Compose([A.RandomCrop(*input_dim)],
+                         bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.1,
+                                                  label_fields="labels"))
         if len(boxes) == 0:
             targets = np.zeros((self.max_labels, 5), dtype=np.float32)
-            image, r_o = preproc(image, input_dim)
+            image, _, _ = preproc(image, boxes, labels, crop)
             return image, targets
 
         image_o = image.copy()
@@ -184,18 +192,16 @@ class TrainTransform:
             augment_hsv(image)
         image_t, boxes = _mirror(image, boxes, self.flip_prob)
         height, width, _ = image_t.shape
-        image_t, r_ = preproc(image_t, input_dim)
+        image_t, boxes, labels = preproc(image_t, boxes, labels, crop)
         # boxes [xyxy] 2 [cx,cy,w,h]
         boxes = xyxy2cxcywh(boxes)
-        boxes *= r_
 
         mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 1
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b]
 
         if len(boxes_t) == 0:
-            image_t, r_o = preproc(image_o, input_dim)
-            boxes_o *= r_o
+            image_t, boxes_o, labels_o = preproc(image_o, boxes_o, labels_o, crop)
             boxes_t = boxes_o
             labels_t = labels_o
 
@@ -204,10 +210,15 @@ class TrainTransform:
         targets_t = np.hstack((labels_t, boxes_t))
         padded_labels = np.zeros((self.max_labels, 5))
         padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
-            : self.max_labels
-        ]
+                                                                  : self.max_labels
+                                                                  ]
         padded_labels = np.ascontiguousarray(padded_labels, dtype=np.float32)
         return image_t, padded_labels
+
+
+class IdentityTransform:
+    def __call__(self, **kwargs):
+        return kwargs
 
 
 class ValTransform:
@@ -234,7 +245,7 @@ class ValTransform:
 
     # assume input is cv2 img for now
     def __call__(self, img, res, input_size):
-        img, _ = preproc(img, input_size, self.swap)
+        img, _, _ = preproc(img, None, None, IdentityTransform(), self.swap)
         if self.legacy:
             img = img[::-1, :, :].copy()
             img /= 255.0

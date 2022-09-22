@@ -30,7 +30,8 @@ class Exp(BaseExp):
         # set worker to 4 for shorter dataloader init time
         # If your training process cost many memory, reduce this value.
         self.data_num_workers = 4
-        self.input_size = (640, 640)  # (height, width)
+        self.input_size = (1920, 1080)  # (height, width)
+        self.crop_size = (192, 108)
         # Actual multiscale ranges: [640 - 5 * 32, 640 + 5 * 32].
         # To disable multiscale training, set the value to 0.
         self.multiscale_range = 5
@@ -144,6 +145,7 @@ class Exp(BaseExp):
                 data_dir=self.data_dir,
                 json_file=self.train_ann,
                 img_size=self.input_size,
+                crop_size=self.crop_size,
                 preproc=TrainTransform(
                     max_labels=50,
                     flip_prob=self.flip_prob,
@@ -154,7 +156,7 @@ class Exp(BaseExp):
         dataset = MosaicDetection(
             dataset,
             mosaic=not no_aug,
-            img_size=self.input_size,
+            img_size=self.crop_size,
             preproc=TrainTransform(
                 max_labels=120,
                 flip_prob=self.flip_prob,
@@ -277,6 +279,7 @@ class Exp(BaseExp):
             json_file=self.val_ann if not testdev else self.test_ann,
             name="val2017" if not testdev else "test2017",
             img_size=self.test_size,
+            crop_size=self.crop_size,
             preproc=ValTransform(legacy=legacy),
         )
 
@@ -304,7 +307,7 @@ class Exp(BaseExp):
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev, legacy)
         evaluator = COCOEvaluator(
             dataloader=val_loader,
-            img_size=self.test_size,
+            img_size=self.crop_size,
             confthre=self.test_conf,
             nmsthre=self.nmsthre,
             num_classes=self.num_classes,

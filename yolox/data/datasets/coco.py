@@ -43,6 +43,7 @@ class COCODataset(Dataset):
         json_file="instances_train2017.json",
         name="train2017",
         img_size=(416, 416),
+        crop_size=(416, 416),
         preproc=None,
         cache=False,
     ):
@@ -55,7 +56,7 @@ class COCODataset(Dataset):
             img_size (int): target image size after pre-processing
             preproc: data augmentation strategy
         """
-        super().__init__(img_size)
+        super().__init__(crop_size)
         if data_dir is None:
             data_dir = os.path.join(get_yolox_datadir(), "COCO")
         self.data_dir = data_dir
