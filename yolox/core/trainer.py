@@ -53,7 +53,7 @@ class Trainer:
 
         # data/dataloader related attr
         self.data_type = torch.float16 if args.fp16 else torch.float32
-        self.input_size = exp.input_size
+        self.input_size = exp.crop_size
         self.best_ap = 0
 
         # metric record
@@ -99,6 +99,7 @@ class Trainer:
         targets = targets.to(self.data_type)
         targets.requires_grad = False
         inps, targets = self.exp.preprocess(inps, targets, self.input_size)
+        print(inps.shape, targets.shape)
         data_end_time = time.time()
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
@@ -272,10 +273,10 @@ class Trainer:
             self.meter.clear_meters()
 
         # random resizing
-        if (self.progress_in_iter + 1) % 10 == 0:
-            self.input_size = self.exp.random_resize(
-                self.train_loader, self.epoch, self.rank, self.is_distributed
-            )
+        # if (self.progress_in_iter + 1) % 10 == 0:
+        #     self.input_size = self.exp.random_resize(
+        #         self.train_loader, self.epoch, self.rank, self.is_distributed
+        #     )
 
     @property
     def progress_in_iter(self):

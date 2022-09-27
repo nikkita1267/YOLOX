@@ -13,3 +13,7 @@ class Exp(MyExp):
         self.depth = 0.33
         self.width = 0.50
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
+        self.multiscale_range = 0
+        self.crop_size = (192, 128)
+        self.test_size = self.crop_size
+        self.num_classes = 1

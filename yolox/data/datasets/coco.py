@@ -56,7 +56,7 @@ class COCODataset(Dataset):
             img_size (int): target image size after pre-processing
             preproc: data augmentation strategy
         """
-        super().__init__(crop_size)
+        super().__init__(img_size)
         if data_dir is None:
             data_dir = os.path.join(get_yolox_datadir(), "COCO")
         self.data_dir = data_dir
@@ -146,7 +146,7 @@ class COCODataset(Dataset):
             y1 = np.max((0, obj["bbox"][1]))
             x2 = np.min((width, x1 + np.max((0, obj["bbox"][2]))))
             y2 = np.min((height, y1 + np.max((0, obj["bbox"][3]))))
-            if obj["area"] > 0 and x2 >= x1 and y2 >= y1:
+            if obj["area"] > 0 and x2 > x1 and y2 > y1:
                 obj["clean_bbox"] = [x1, y1, x2, y2]
                 objs.append(obj)
 
@@ -231,5 +231,5 @@ class COCODataset(Dataset):
         img, target, img_info, img_id = self.pull_item(index)
 
         if self.preproc is not None:
-            img, target = self.preproc(img, target, self.input_dim)
+            img, target = self.preproc(img, target, self.crop_size)
         return img, target, img_info, img_id

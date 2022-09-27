@@ -160,7 +160,7 @@ def preproc(img, boxes, labels, transform, swap=(2, 0, 1)):
     boxes = transformed["bboxes"]
     labels = transformed["labels"]
     padded_img = transformed["image"].transpose(swap)
-    return padded_img, boxes, labels
+    return padded_img, np.array(boxes), np.array(labels)
 
 
 class TrainTransform:
@@ -174,7 +174,7 @@ class TrainTransform:
         labels = targets[:, 4].copy()
         crop = A.Compose([A.RandomCrop(*input_dim)],
                          bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.1,
-                                                  label_fields="labels"))
+                                                  label_fields=["labels"]))
         if len(boxes) == 0:
             targets = np.zeros((self.max_labels, 5), dtype=np.float32)
             image, _, _ = preproc(image, boxes, labels, crop)
@@ -186,24 +186,44 @@ class TrainTransform:
         boxes_o = targets_o[:, :4]
         labels_o = targets_o[:, 4]
         # bbox_o: [xyxy] to [c_x,c_y,w,h]
+        boxes_o_coco = boxes_o.copy()
         boxes_o = xyxy2cxcywh(boxes_o)
 
         if random.random() < self.hsv_prob:
             augment_hsv(image)
         image_t, boxes = _mirror(image, boxes, self.flip_prob)
         height, width, _ = image_t.shape
-        image_t, boxes, labels = preproc(image_t, boxes, labels, crop)
+        filter_box = boxes[(boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0, :]
+        filter_labels = labels[(boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]) > 0]
+        image_t, boxes, labels = preproc(image_t, filter_box, filter_labels, crop)
         # boxes [xyxy] 2 [cx,cy,w,h]
-        boxes = xyxy2cxcywh(boxes)
-
-        mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 1
-        boxes_t = boxes[mask_b]
-        labels_t = labels[mask_b]
-
-        if len(boxes_t) == 0:
-            image_t, boxes_o, labels_o = preproc(image_o, boxes_o, labels_o, crop)
+        if len(boxes) == 0:
+            filter_box = boxes_o_coco[(boxes_o[:, 2]) * (boxes_o[:, 3]) > 0, :]
+            filter_labels = labels_o[(boxes_o[:, 2]) * (boxes_o[:, 3]) > 0]
+            image_t, boxes_o, labels_o = preproc(image_o, filter_box, filter_labels, crop)
+            if len(boxes_o) == 0:
+                targets = np.zeros((self.max_labels, 5), dtype=np.float32)
+                return image_t, targets
+            boxes_o = xyxy2cxcywh(boxes_o)
             boxes_t = boxes_o
             labels_t = labels_o
+        else:
+            boxes = xyxy2cxcywh(boxes)
+
+            mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 1
+            boxes_t = boxes[mask_b]
+            labels_t = labels[mask_b]
+
+            if len(boxes_t) == 0:
+                filter_box = boxes_o_coco[(boxes_o[:, 2]) * (boxes_o[:, 3]) > 0, :]
+                filter_labels = labels_o[(boxes_o[:, 2]) * (boxes_o[:, 3]) > 0]
+                image_t, boxes_o, labels_o = preproc(image_o, filter_box, filter_labels, crop)
+                if len(boxes_o) == 0:
+                    targets = np.zeros((self.max_labels, 5), dtype=np.float32)
+                    return image_t, targets
+                boxes_o = xyxy2cxcywh(boxes_o)
+                boxes_t = boxes_o
+                labels_t = labels_o
 
         labels_t = np.expand_dims(labels_t, 1)
 
@@ -245,7 +265,10 @@ class ValTransform:
 
     # assume input is cv2 img for now
     def __call__(self, img, res, input_size):
-        img, _, _ = preproc(img, None, None, IdentityTransform(), self.swap)
+        crop = A.Compose([A.RandomCrop(*input_size)],
+                         bbox_params=A.BboxParams(format='pascal_voc', min_visibility=0.1,
+                                                  label_fields=["labels"]))
+        img, _, _ = preproc(img, [], [], crop, self.swap)
         if self.legacy:
             img = img[::-1, :, :].copy()
             img /= 255.0

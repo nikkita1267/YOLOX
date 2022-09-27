@@ -218,8 +218,8 @@ class Exp(BaseExp):
         return input_size
 
     def preprocess(self, inputs, targets, tsize):
-        scale_y = tsize[0] / self.input_size[0]
-        scale_x = tsize[1] / self.input_size[1]
+        scale_y = tsize[0] / self.crop_size[0]
+        scale_x = tsize[1] / self.crop_size[1]
         if scale_x != 1 or scale_y != 1:
             inputs = nn.functional.interpolate(
                 inputs, size=tsize, mode="bilinear", align_corners=False
@@ -278,7 +278,7 @@ class Exp(BaseExp):
             data_dir=self.data_dir,
             json_file=self.val_ann if not testdev else self.test_ann,
             name="val2017" if not testdev else "test2017",
-            img_size=self.test_size,
+            img_size=self.input_size,
             crop_size=self.crop_size,
             preproc=ValTransform(legacy=legacy),
         )
