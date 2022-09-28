@@ -156,11 +156,20 @@ def preproc(img, boxes, labels, transform, swap=(2, 0, 1)):
     #
     # padded_img = padded_img.transpose(swap)
     # padded_img = np.ascontiguousarray(padded_img, dtype=np.float32)
-    transformed = transform(image=img, bboxes=boxes, labels=labels)
-    boxes = transformed["bboxes"]
-    labels = transformed["labels"]
+    transformed_boxes = []
+    transformed_labels = labels
+    if len(boxes) == 0:
+        transformed = transform(image=img, bboxes=boxes, labels=labels)
+        transformed_boxes = transformed["bboxes"]
+        transformed_labels = transformed["labels"]
+    else:
+        while len(transformed_boxes) == 0:
+            transformed = transform(image=img, bboxes=boxes, labels=labels)
+            transformed_boxes = transformed["bboxes"]
+            transformed_labels = transformed["labels"]
+    assert (len(boxes) > 0 and len(transformed_boxes) > 0) or len(boxes) == 0, "Not enough labels:("
     padded_img = transformed["image"].transpose(swap)
-    return padded_img, np.array(boxes), np.array(labels)
+    return padded_img, np.array(transformed_boxes), np.array(transformed_labels)
 
 
 class TrainTransform:
