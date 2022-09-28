@@ -71,6 +71,7 @@ class COCODataset(Dataset):
         self.imgs = None
         self.name = name
         self.img_size = img_size
+        self.crop_size = crop_size
         self.preproc = preproc
         self.annotations = self._load_coco_annotations()
         if cache:
