@@ -8,6 +8,7 @@ torchvision
 thop
 ninja
 tabulate
+albumentations
 
 # verified versions
 # pycocotools corresponds to https://github.com/ppwwyyxx/cocoapi
